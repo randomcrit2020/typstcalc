@@ -51,6 +51,102 @@ E_c = 4700 * sqrt(mag(f_c, ureg.MPa)) * ureg.MPa >> ureg.GPa  # Elastic modulus
 The `>> unit` suffix converts the evaluated Pint quantity before it is stored
 and displayed.
 
+## Mathematical expressions
+
+Normal Python arithmetic is supported, including `+`, `-`, `*`, `/`,
+parentheses, and powers written with `**`:
+
+```python
+%%typstcalc define
+L = 4 * ureg.m       # Length
+b = 300 * ureg.mm    # Width
+h = 600 * ureg.mm    # Height
+```
+
+In a new cell:
+
+```python
+%%typstcalc
+A = b * h >> ureg.mm**2       # Area
+I = b * h**3 / 12 >> ureg.mm**4  # Second moment of area
+```
+
+The extension currently recognizes these mathematical helpers:
+
+- `sqrt(x)`
+- `sin(x)`, `cos(x)`, `tan(x)`, and `cot(x)`
+- `abs(x)`
+- `ceil(x)` and `floor(x)`
+- `max(...)` and `min(...)`
+
+Example:
+
+```python
+%%typstcalc define
+x = 9                         # Dimensionless value
+theta = 30 * ureg.degree      # Angle
+V_1 = -12 * ureg.kN           # Signed force
+V_2 = 18 * ureg.kN            # Second force
+n = 3.2                       # Dimensionless count
+```
+
+In a new cell:
+
+```python
+%%typstcalc
+root_x = sqrt(x)               # Square root
+s_theta = sin(theta)           # Sine
+c_theta = cos(theta)           # Cosine
+V_abs = abs(V_1)               # Absolute value
+V_max = max(V_1, V_2)          # Maximum
+n_up = ceil(n)                 # Round upward
+n_down = floor(n)              # Round downward
+```
+
+The trigonometric helpers accept plain radians or Pint angle quantities such
+as `30 * ureg.degree`. For dimensional quantities, convert to a magnitude
+before applying a function that expects a plain number:
+
+```python
+%%typstcalc
+E_c = 4700 * sqrt(mag(f_c, ureg.MPa)) * ureg.MPa >> ureg.GPa
+```
+
+Here, `mag(f_c, ureg.MPa)` converts `f_c` to MPa and returns its numerical
+magnitude. The expression then reapplies the correct output unit.
+
+### Adding another function
+
+A new function must be available to Python and understood by both equation
+rendering passes. For example, to add natural logarithms as `ln(x)`:
+
+1. Define the evaluator near the other helpers:
+
+   ```python
+   def ln(value):
+       return math.log(value)
+   ```
+
+2. Add it to the notebook namespace inside `register`:
+
+   ```python
+   namespace.setdefault("ln", ln)
+   ```
+
+3. Add an `ast.Call` branch to both `_symbol_latex_from_ast` and
+   `_value_latex_from_ast`, rendering the function as `\ln\left(...\right)`.
+
+After those additions, it can be used normally:
+
+```python
+%%typstcalc
+y = ln(x)  # Natural logarithm
+```
+
+Defining a Python function in the notebook is sufficient for evaluation but
+not for equation output; unsupported call syntax is intentionally rejected by
+the renderer.
+
 ## Symbols and descriptions
 
 Comments control presentation without changing the Python variable name:
