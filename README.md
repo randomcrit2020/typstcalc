@@ -143,6 +143,37 @@ Python import path. Load it once near the beginning of the notebook:
 The extension adds `ureg`, `Q_`, `sqrt`, trigonometric helpers, `mag`, and
 other calculation helpers to the notebook namespace.
 
+### Using this repository as a submodule
+
+For a shared copy that can be updated across several projects, add the
+repository as a submodule. The name `typstcalc-src` avoids a Python import-name
+collision with the `typstcalc.py` module inside it:
+
+```powershell
+git submodule add git@github.com:randomcrit2020/typstcalc.git typstcalc-src
+git commit -m "Add typstcalc submodule"
+```
+
+Add the submodule directory to the Python import path before loading the
+extension:
+
+```python
+import sys
+from pathlib import Path
+
+typstcalc_path = str((Path.cwd() / "typstcalc-src").resolve())
+if typstcalc_path not in sys.path:
+    sys.path.insert(0, typstcalc_path)
+
+%load_ext typstcalc
+```
+
+Initialize the submodule after cloning an existing parent project:
+
+```powershell
+git submodule update --init --recursive
+```
+
 ## Basic calculation
 
 Use `%%typstcalc define` for input values:
