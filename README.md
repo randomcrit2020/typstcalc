@@ -160,6 +160,63 @@ phi_V_n = 0.75 * 420 * ureg.kN  # symbol=\phi V_n | Design shear resistance
 - `# symbol=E_c` changes only the displayed mathematical symbol.
 - `# symbol=E_c | Description` sets both the symbol and note.
 
+### Greek letters
+
+Variable names are passed through SymPy's LaTeX printer. The following
+lowercase names render automatically as Greek letters:
+
+| Names | Rendered symbols |
+| --- | --- |
+| `alpha`, `beta`, `gamma`, `delta` | `\alpha`, `\beta`, `\gamma`, `\delta` |
+| `epsilon`, `zeta`, `eta`, `theta` | `\epsilon`, `\zeta`, `\eta`, `\theta` |
+| `iota`, `kappa`, `mu`, `nu` | `\iota`, `\kappa`, `\mu`, `\nu` |
+| `xi`, `pi`, `rho`, `sigma`, `tau` | `\xi`, `\pi`, `\rho`, `\sigma`, `\tau` |
+| `upsilon`, `phi`, `chi`, `psi`, `omega` | `\upsilon`, `\phi`, `\chi`, `\psi`, `\omega` |
+
+`omicron` is accepted but renders as the Latin letter `o`, since the glyphs
+are identical. `lambda` renders as `\lambda`, but `lambda` is a reserved Python
+keyword and cannot be used as the left side of an assignment. Use a safe
+Python name with a display override instead:
+
+```python
+%%typstcalc define
+lambda_value = 1.15  # symbol=\lambda | Slenderness factor
+```
+
+The uppercase names with distinct Greek glyphs are:
+
+| Python name | Output | Python name | Output |
+| --- | --- | --- | --- |
+| `Gamma` | `\Gamma` | `Delta` | `\Delta` |
+| `Theta` | `\Theta` | `Lambda` | `\Lambda` |
+| `Xi` | `\Xi` | `Pi` | `\Pi` |
+| `Sigma` | `\Sigma` | `Upsilon` | `\Upsilon` |
+| `Phi` | `\Phi` | `Psi` | `\Psi` |
+| `Omega` | `\Omega` |  |  |
+
+Other uppercase Greek names render as upright Latin letters because their
+usual mathematical glyphs are identical to Latin capitals.
+
+Variant forms are also recognized: `varepsilon`, `vartheta`, `varpi`,
+`varrho`, `varsigma`, and `varphi`.
+
+Underscores create subscripts automatically:
+
+```python
+%%typstcalc define
+alpha_1 = 0.85                 # Displays as \alpha_1
+theta_max = 45 * ureg.degree   # Displays as \theta_{max}
+phi_n = 0.75                   # Displays as \phi_n
+```
+
+For any notation that is awkward or invalid as a Python identifier, use
+`symbol=` with raw LaTeX/MiTeX notation:
+
+```python
+%%typstcalc
+rho_prime = 0.012  # symbol=\rho' | Compression reinforcement ratio
+```
+
 ## Reusing a previous value
 
 Write a previously calculated variable without `=` to display it again. An
