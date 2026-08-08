@@ -5,6 +5,21 @@ and Quarto notebooks. It evaluates Python expressions and emits
 Typst-compatible MiTeX equations showing the symbolic expression, substituted
 values, units, and final result.
 
+## Rendering pipeline
+
+For now, `typstcalc` uses a LaTeX-based intermediate representation rather
+than generating native Typst math directly:
+
+1. Python and Pint evaluate the expression and handle quantities and units.
+2. The expression renderer uses SymPy's LaTeX printer where needed to produce
+   LaTeX mathematical notation for symbols, values, and equations.
+3. The magic wraps that notation in a raw Typst `#mitex(...)` block.
+4. During Typst compilation, the MiTeX package interprets the LaTeX math and
+   converts it into content that Typst can render.
+
+In short: **Python/Pint calculation → SymPy/LaTeX notation → MiTeX → Typst**.
+No LaTeX engine or separate LaTeX compilation step is required.
+
 ## Requirements
 
 - Python with IPython
