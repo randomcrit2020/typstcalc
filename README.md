@@ -180,13 +180,17 @@ phi_V_n = 0.75 * 420 * ureg.kN  # symbol=\phi V_n | Design shear resistance
 Variable names are passed through SymPy's LaTeX printer. The following
 lowercase names render automatically as Greek letters:
 
-| Names | Rendered symbols |
+GitHub Markdown uses MathJax for the previews in the **Rendered symbols**
+column. This README rendering is only a visual reference; notebook output
+still follows the SymPy/LaTeX → MiTeX → Typst pipeline described above.
+
+| Python names | Rendered symbols |
 | --- | --- |
-| `alpha`, `beta`, `gamma`, `delta` | `\alpha`, `\beta`, `\gamma`, `\delta` |
-| `epsilon`, `zeta`, `eta`, `theta` | `\epsilon`, `\zeta`, `\eta`, `\theta` |
-| `iota`, `kappa`, `mu`, `nu` | `\iota`, `\kappa`, `\mu`, `\nu` |
-| `xi`, `pi`, `rho`, `sigma`, `tau` | `\xi`, `\pi`, `\rho`, `\sigma`, `\tau` |
-| `upsilon`, `phi`, `chi`, `psi`, `omega` | `\upsilon`, `\phi`, `\chi`, `\psi`, `\omega` |
+| `alpha`, `beta`, `gamma`, `delta` | $\alpha,\ \beta,\ \gamma,\ \delta$ |
+| `epsilon`, `zeta`, `eta`, `theta` | $\epsilon,\ \zeta,\ \eta,\ \theta$ |
+| `iota`, `kappa`, `mu`, `nu` | $\iota,\ \kappa,\ \mu,\ \nu$ |
+| `xi`, `pi`, `rho`, `sigma`, `tau` | $\xi,\ \pi,\ \rho,\ \sigma,\ \tau$ |
+| `upsilon`, `phi`, `chi`, `psi`, `omega` | $\upsilon,\ \phi,\ \chi,\ \psi,\ \omega$ |
 
 `omicron` is accepted but renders as the Latin letter `o`, since the glyphs
 are identical. `lambda` renders as `\lambda`, but `lambda` is a reserved Python
@@ -200,20 +204,25 @@ lambda_value = 1.15  # symbol=\lambda | Slenderness factor
 
 The uppercase names with distinct Greek glyphs are:
 
-| Python name | Output | Python name | Output |
+| Python name | Rendered | Python name | Rendered |
 | --- | --- | --- | --- |
-| `Gamma` | `\Gamma` | `Delta` | `\Delta` |
-| `Theta` | `\Theta` | `Lambda` | `\Lambda` |
-| `Xi` | `\Xi` | `Pi` | `\Pi` |
-| `Sigma` | `\Sigma` | `Upsilon` | `\Upsilon` |
-| `Phi` | `\Phi` | `Psi` | `\Psi` |
-| `Omega` | `\Omega` |  |  |
+| `Gamma` | $\Gamma$ | `Delta` | $\Delta$ |
+| `Theta` | $\Theta$ | `Lambda` | $\Lambda$ |
+| `Xi` | $\Xi$ | `Pi` | $\Pi$ |
+| `Sigma` | $\Sigma$ | `Upsilon` | $\Upsilon$ |
+| `Phi` | $\Phi$ | `Psi` | $\Psi$ |
+| `Omega` | $\Omega$ |  |  |
 
 Other uppercase Greek names render as upright Latin letters because their
 usual mathematical glyphs are identical to Latin capitals.
 
-Variant forms are also recognized: `varepsilon`, `vartheta`, `varpi`,
-`varrho`, `varsigma`, and `varphi`.
+Variant forms are also recognized:
+
+| Python name | Rendered | Python name | Rendered |
+| --- | --- | --- | --- |
+| `varepsilon` | $\varepsilon$ | `vartheta` | $\vartheta$ |
+| `varpi` | $\varpi$ | `varrho` | $\varrho$ |
+| `varsigma` | $\varsigma$ | `varphi` | $\varphi$ |
 
 Underscores create subscripts automatically:
 
