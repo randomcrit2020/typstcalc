@@ -85,12 +85,15 @@ Python stores `sigma` as a Pint quantity equal to `60 MPa`. The generated
 equation communicates the calculation approximately as:
 
 $$
-\sigma = \frac{P}{A}
-= \frac{120\ \mathrm{kN}}{2000\ \mathrm{mm}^2}
-= 60\ \mathrm{MPa}
+\begin{aligned}
+\sigma &= \frac{P}{A} && \quad \text{Axial stress} \\
+&= \frac{120\ \mathrm{kN}}{2000\ \mathrm{mm}^2} \\
+&= 60\ \mathrm{MPa}
+\end{aligned}
 $$
 
-The comment after `#` becomes the equation description. The final
+The comment after `#` becomes the description shown beside the first equation
+line. The final
 `>> ureg.MPa` requests the unit used for the stored and displayed result.
 
 ## Rendering pipeline
