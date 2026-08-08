@@ -5,6 +5,77 @@ and Quarto notebooks. It evaluates Python expressions and emits
 Typst-compatible MiTeX equations showing the symbolic expression, substituted
 values, units, and final result.
 
+## What this project does
+
+Engineering reports often need to show more than a final number. A reader
+should be able to see the equation, the values substituted into it, the units,
+and the result. Writing that calculation once in Python and then transcribing
+it again into a report is repetitive and can introduce inconsistencies.
+
+`typstcalc` turns one Python calculation into both:
+
+- an evaluated value that later notebook cells can reuse; and
+- a report-ready equation for a Typst document.
+
+It is intended for executable Jupyter or Quarto notebooks that are rendered
+to Typst. It does not replace Typst or create an entire document by itself;
+it generates the equation blocks that become part of that document.
+
+### What is a cell magic?
+
+In IPython and Jupyter, a command beginning with `%%` is a *cell magic*. It
+controls how the entire code cell is processed. `%%typstcalc` must therefore
+be the first line of a cell, and every calculation below it is evaluated and
+formatted by this extension.
+
+The single-percent command `%load_ext typstcalc` loads the extension into the
+current notebook session. It normally appears once near the beginning of the
+notebook.
+
+### Typical workflow
+
+1. Put `typstcalc.py` on the Python import path and load the extension.
+2. Enter known values in a `%%typstcalc define` cell.
+3. Enter derived equations in later `%%typstcalc` cells.
+4. Continue using the calculated Python variables elsewhere in the notebook.
+5. Render the notebook through Quarto/Typst. MiTeX converts the generated math
+   notation into equations in the final document.
+
+### Small example
+
+First load the extension:
+
+```python
+%load_ext typstcalc
+```
+
+Define the input values in a new cell:
+
+```python
+%%typstcalc define
+P = 120 * ureg.kN       # Applied axial force
+A = 2000 * ureg.mm**2   # Cross-sectional area
+```
+
+Calculate the stress in another cell:
+
+```python
+%%typstcalc
+sigma = P / A >> ureg.MPa  # Axial stress
+```
+
+Python stores `sigma` as a Pint quantity equal to `60 MPa`. The generated
+equation communicates the calculation approximately as:
+
+$$
+\sigma = \frac{P}{A}
+= \frac{120\ \mathrm{kN}}{2000\ \mathrm{mm}^2}
+= 60\ \mathrm{MPa}
+$$
+
+The comment after `#` becomes the equation description. The final
+`>> ureg.MPa` requests the unit used for the stored and displayed result.
+
 ## Rendering pipeline
 
 For now, `typstcalc` uses a LaTeX-based intermediate representation rather
