@@ -74,6 +74,15 @@ P = 120 * ureg.kN       # Applied axial force
 A = 2000 * ureg.mm**2   # Cross-sectional area
 ```
 
+Definition mode displays each input as a value with its unit and description:
+
+$$
+\begin{aligned}
+P &= 120\ \mathrm{kN} && \quad \text{Applied axial force} \\
+A &= 2000\ \mathrm{mm}^2 && \quad \text{Cross-sectional area}
+\end{aligned}
+$$
+
 Calculate the stress in another cell:
 
 ```python
