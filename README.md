@@ -21,6 +21,23 @@ It is intended for executable Jupyter or Quarto notebooks that are rendered
 to Typst. It does not replace Typst or create an entire document by itself;
 it generates the equation blocks that become part of that document.
 
+The best fit is a **Quarto calculation report rendered to PDF through Typst**.
+In this kind of document, showing only the governing formula or final answer
+is often insufficient. Reviewers need to see which values replaced each
+variable, whether the units are consistent, and how the reported result was
+obtained. `typstcalc` generates that calculation trail automatically:
+
+$$
+\text{symbolic equation}
+\;\longrightarrow\;
+\text{substituted values}
+\;\longrightarrow\;
+\text{result with units}
+$$
+
+This makes calculation reports easier to review, audit, and understand while
+keeping the displayed equations tied directly to the executed Python code.
+
 ### What is a cell magic?
 
 In IPython and Jupyter, a command beginning with `%%` is a *cell magic*. It
