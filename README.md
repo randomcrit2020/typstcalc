@@ -105,6 +105,11 @@ The comment after `#` becomes the description shown beside the first equation
 line. The final
 `>> ureg.MPa` requests the unit used for the stored and displayed result.
 
+Use `%%typstcalc aligned` (aliases: `align` and `together`) when a compact set
+of calculations should share one aligned environment. The option keeps up to
+15 generated rows together; longer output remains split into balanced,
+page-friendly blocks.
+
 ## Rendering pipeline
 
 For now, `typstcalc` uses a LaTeX-based intermediate representation rather
@@ -409,4 +414,5 @@ The Typst document therefore needs definitions similar to:
 ```
 
 The magic automatically divides large aligned equation groups into
-page-friendly blocks.
+page-friendly blocks and rebalances short trailing blocks while keeping each
+variable calculation intact.

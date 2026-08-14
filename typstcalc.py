@@ -59,6 +59,7 @@ TRIG_LATEX = {"sin": r"\sin", "cos": r"\cos", "tan": r"\tan", "cot": r"\cot"}
 # each generated block short gives the page builder frequent, useful break
 # points and avoids both bottom-margin overflow and avoidable half-empty pages.
 MAX_ALIGNED_ROWS_PER_BLOCK = 9
+MAX_ALIGNED_ROWS_TOGETHER = 15
 WRAPPED_FUNCTION_ARGS_PER_ROW = 2
 
 
@@ -180,14 +181,14 @@ def mitex_block(latex):
     return "```{=typst}\n#calc-block[#mitex(`" + latex + "`)]\n```"
 
 
-def aligned_block(rows):
+def aligned_block(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK):
     blocks = []
-    for chunk in _chunk_aligned_rows(rows):
+    for chunk in _chunk_aligned_rows(rows, max_rows=max_rows):
         blocks.append(mitex_block("\\begin{aligned}\n" + (r"\\" + "\n").join(chunk) + "\n\\end{aligned}"))
     return "\n\n".join(blocks)
 
 
-def _chunk_aligned_rows(rows):
+def _chunk_aligned_rows(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK):
     """Split aligned output into page-friendly, approximately balanced blocks.
 
     A normal variable calculation stays together.  Exceptionally long
@@ -207,11 +208,11 @@ def _chunk_aligned_rows(rows):
 
     page_groups = []
     for group in groups:
-        if len(group) <= MAX_ALIGNED_ROWS_PER_BLOCK:
+        if len(group) <= max_rows:
             page_groups.append(group)
             continue
 
-        part_count = math.ceil(len(group) / MAX_ALIGNED_ROWS_PER_BLOCK)
+        part_count = math.ceil(len(group) / max_rows)
         base_size, extra = divmod(len(group), part_count)
         start = 0
         for part_index in range(part_count):
@@ -219,16 +220,45 @@ def _chunk_aligned_rows(rows):
             page_groups.append(group[start : start + part_size])
             start += part_size
 
-    chunks = []
+    # First pack whole variables greedily, then rebalance adjacent blocks.  A
+    # plain greedy pass can leave a visually awkward tail (for example four
+    # three-row calculations become 9 + 3).  Moving the last complete variable
+    # from the preceding block produces 6 + 6 while preserving equation
+    # integrity and the page-friendly row limit.
+    grouped_chunks = []
     chunk = []
+    chunk_rows = 0
     for group in page_groups:
-        if chunk and len(chunk) + len(group) > MAX_ALIGNED_ROWS_PER_BLOCK:
-            chunks.append(chunk)
+        if chunk and chunk_rows + len(group) > max_rows:
+            grouped_chunks.append(chunk)
             chunk = []
-        chunk.extend(group)
+            chunk_rows = 0
+        chunk.append(group)
+        chunk_rows += len(group)
     if chunk:
-        chunks.append(chunk)
-    return chunks
+        grouped_chunks.append(chunk)
+
+    for index in range(len(grouped_chunks) - 1, 0, -1):
+        previous = grouped_chunks[index - 1]
+        current = grouped_chunks[index]
+        while len(previous) > 1:
+            previous_rows = sum(map(len, previous))
+            current_rows = sum(map(len, current))
+            moving_rows = len(previous[-1])
+            if current_rows + moving_rows > max_rows:
+                break
+            old_difference = abs(previous_rows - current_rows)
+            new_difference = abs(
+                (previous_rows - moving_rows) - (current_rows + moving_rows)
+            )
+            if new_difference >= old_difference:
+                break
+            current.insert(0, previous.pop())
+
+    return [
+        [row for group in grouped_chunk for row in group]
+        for grouped_chunk in grouped_chunks
+    ]
 
 
 def register(ipython):
@@ -252,6 +282,8 @@ def register(ipython):
         options = set(line.strip().lower().split())
         define_mode = bool(options & {"define", "definitions", "defs", "vars"})
         wrap_functions = bool(options & {"wrap", "breaks", "linebreaks", "autobreaks", "auto-breaks", "cortes"})
+        keep_aligned = bool(options & {"align", "aligned", "together"})
+        max_rows = MAX_ALIGNED_ROWS_TOGETHER if keep_aligned else MAX_ALIGNED_ROWS_PER_BLOCK
         rows = []
         calc_rows = []
 
@@ -299,9 +331,9 @@ def register(ipython):
                 calc_rows.extend(_calculation_rows(calc_vars[name], expression, result, namespace, wrap_functions=wrap_functions))
 
         if define_mode and rows:
-            display(Markdown(aligned_block(rows)))
+            display(Markdown(aligned_block(rows, max_rows=max_rows)))
         elif calc_rows:
-            display(Markdown(aligned_block(calc_rows)))
+            display(Markdown(aligned_block(calc_rows, max_rows=max_rows)))
 
     ipython.register_magic_function(typstcalc, "cell", "typstcalc")
 
