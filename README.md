@@ -106,24 +106,27 @@ line. The final
 `>> ureg.MPa` requests the unit used for the stored and displayed result.
 
 Use `%%typstcalc aligned` (aliases: `align` and `together`) when a compact set
-of calculations should share one aligned environment. The option keeps up to
-15 generated rows together; longer output remains split into balanced,
+of calculations should share one calculation grid. The option keeps up to 15
+generated rows together; longer output remains split into balanced,
 page-friendly blocks.
 
 ## Rendering pipeline
 
-For now, `typstcalc` uses a LaTeX-based intermediate representation rather
-than generating native Typst math directly:
+`typstcalc` combines a LaTeX-based mathematical representation with native
+Typst layout:
 
 1. Python and Pint evaluate the expression and handle quantities and units.
 2. The expression renderer uses SymPy's LaTeX printer where needed to produce
    LaTeX mathematical notation for symbols, values, and equations.
-3. The magic wraps that notation in a raw Typst `#mitex(...)` block.
-4. During Typst compilation, the MiTeX package interprets the LaTeX math and
-   converts it into content that Typst can render.
+3. The magic sends each equation cell through `#mitex(...)`.
+4. Native Typst grid columns position the complete MiTeX-aligned equation and
+   its wrapping description inside the available text width.
+5. During Typst compilation, MiTeX interprets only the mathematical cells;
+   Typst handles comment wrapping, alignment, column widths, and page margins.
 
-In short: **Python/Pint calculation → SymPy/LaTeX notation → MiTeX → Typst**.
-No LaTeX engine or separate LaTeX compilation step is required.
+In short: **Python/Pint calculation → SymPy/LaTeX notation → MiTeX math cells
+→ native Typst grid**. No LaTeX engine or separate LaTeX compilation step is
+required.
 
 ## Requirements
 
@@ -400,19 +403,56 @@ Equivalent option names include `breaks`, `linebreaks`, and `autobreaks`.
 
 ## Typst preamble
 
-Generated output uses raw Typst blocks containing `#calc-block[#mitex(...)]`.
-The Typst document therefore needs definitions similar to:
+Generated output uses raw Typst blocks containing row data passed to
+`#calc-block(...)`. The Typst document therefore needs definitions similar to:
 
 ```typst
 #import "@preview/mitex:0.2.7": *
 
-#let calc-block(body) = block(
+#let calc-fit(body, side: left) = layout(size => {
+  let boxed = box(body)
+  let natural = measure(boxed)
+  let fitted = if natural.width > size.width {
+    let factor = size.width / natural.width
+    scale(x: factor * 100%, y: factor * 100%, reflow: true, boxed)
+  } else { boxed }
+  align(side, fitted)
+})
+
+#let calc-block(rows, note-align: left) = block(
   width: 100%,
   above: 12pt,
   below: 12pt,
-)[#scale(x: 100%, y: 100%, reflow: true)[#body]]
+)[
+  #let cells = ()
+  #for row in rows {
+    let (equation, note) = row
+    cells.push(calc-fit(equation, side: center))
+    let note-body = if note == none { [] } else {
+      [#set par(justify: false); #text(note)]
+    }
+    cells.push(grid.cell(align: note-align + top, note-body))
+  }
+  #grid(
+    columns: (5.3fr, 3.7fr),
+    column-gutter: 4mm,
+    row-gutter: 4pt,
+    align: (center + top, note-align + top),
+    ..cells,
+  )
+]
 ```
 
-The magic automatically divides large aligned equation groups into
-page-friendly blocks and rebalances short trailing blocks while keeping each
-variable calculation intact.
+The fractional columns consume only the width available inside the document's
+text area, so changing the page size or margins does not require hard-coded
+equation widths. Each variable's symbolic equation, substitution, and result
+remain in one MiTeX `aligned` group; `calc-fit` therefore scales that complete
+group only when it is wider than the assigned equation column, preserving its
+equals alignment and consistent typography. Comments remain native Typst text
+in a wide column anchored at the right page margin. They are left-aligned by
+default for readable multiline wrapping; set `note-align: right` if a
+right-aligned text edge is preferred.
+
+The magic automatically divides large calculation groups into page-friendly
+blocks and rebalances short trailing blocks while keeping each variable
+calculation intact.

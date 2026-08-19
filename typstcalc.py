@@ -32,6 +32,7 @@ To print a value that was already defined or calculated in an earlier
 """
 
 import ast
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -55,9 +56,10 @@ MAX_FUNCTION_NAMES = {"max", "calc_max"}
 MIN_FUNCTION_NAMES = {"min"}
 TRIG_FUNCTION_NAMES = {"sin", "cos", "tan", "cot"}
 TRIG_LATEX = {"sin": r"\sin", "cos": r"\cos", "tan": r"\tan", "cot": r"\cot"}
-# MiTeX aligned environments are indivisible once they reach Typst.  Keeping
-# each generated block short gives the page builder frequent, useful break
-# points and avoids both bottom-margin overflow and avoidable half-empty pages.
+# Keeping each generated grid short gives the Typst page builder frequent,
+# useful break points and avoids both bottom-margin overflow and avoidable
+# half-empty pages.  The historical constant names remain part of the small
+# public surface used by existing notebooks.
 MAX_ALIGNED_ROWS_PER_BLOCK = 9
 MAX_ALIGNED_ROWS_TOGETHER = 15
 WRAPPED_FUNCTION_ARGS_PER_ROW = 2
@@ -76,6 +78,19 @@ class CalcVar:
         if self.display_latex:
             return self.display_latex
         return sp.latex(self.symbol)
+
+
+@dataclass(frozen=True)
+class CalcRow:
+    """One equation-grid row before it is serialized to Typst."""
+
+    lhs: str
+    rhs: str
+    description: str = ""
+
+    @property
+    def starts_new_variable(self):
+        return bool(self.lhs)
 
 
 def _calc_var(name, symbol_text, value, description):
@@ -174,31 +189,77 @@ def _needs_power_wrap_latex(text):
     return "/" in text or text.startswith(r"\frac")
 
 
-def mitex_block(latex):
-    # The notebook preamble defines calc-block(...) as the Typst formatting
-    # wrapper for generated equations. Keeping spacing in that Typst helper
-    # avoids hardcoding vertical #v(...) gaps in every generated output.
-    return "```{=typst}\n#calc-block[#mitex(`" + latex + "`)]\n```"
+def _typst_string(text):
+    """Serialize text safely as a Typst string literal."""
+
+    return json.dumps(text, ensure_ascii=False)
+
+
+def _mitex_content(latex):
+    return f"mitex({_typst_string(latex)})" if latex else "[]"
+
+
+def _row_groups(rows):
+    """Group a symbolic equation with its substitution and result rows."""
+
+    groups = []
+    group = []
+    for row in rows:
+        if row.starts_new_variable and group:
+            groups.append(group)
+            group = []
+        group.append(row)
+    if group:
+        groups.append(group)
+    return groups
+
+
+def typst_calc_block(rows):
+    """Serialize rows for the native Typst calculation grid.
+
+    Each variable's complete equation trail remains in one MiTeX ``aligned``
+    group so its equals signs, line spacing, and scale stay consistent.
+    Descriptions are emitted as plain Typst strings so the document can wrap
+    and align them without allowing the block to exceed its text area.
+    """
+
+    output = ["```{=typst}", "#calc-block(("]
+    for group in _row_groups(rows):
+        first = group[0]
+        equation_rows = []
+        for index, row in enumerate(group):
+            if index == 0 and row.lhs:
+                equation_rows.append(f"{row.lhs} &= {row.rhs}")
+            else:
+                equation_rows.append(f"&= {row.rhs}")
+        equation_latex = (r"\\" + "\n").join(equation_rows)
+        equation = _mitex_content(
+            "\\begin{aligned}\n" + equation_latex + "\n\\end{aligned}"
+        )
+        description = _short_description(first.description)
+        note = _typst_string(description) if description else "none"
+        output.append(f"  ({equation}, {note}),")
+    output.extend(("))", "```"))
+    return "\n".join(output)
 
 
 def aligned_block(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK):
     blocks = []
     for chunk in _chunk_aligned_rows(rows, max_rows=max_rows):
-        blocks.append(mitex_block("\\begin{aligned}\n" + (r"\\" + "\n").join(chunk) + "\n\\end{aligned}"))
+        blocks.append(typst_calc_block(chunk))
     return "\n\n".join(blocks)
 
 
 def _chunk_aligned_rows(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK):
-    """Split aligned output into page-friendly, approximately balanced blocks.
+    """Split grid output into page-friendly, approximately balanced blocks.
 
     A normal variable calculation stays together.  Exceptionally long
-    calculations are divided into balanced continuation blocks because a
-    single MiTeX ``aligned`` environment cannot break across Typst pages.
+    calculations are divided into balanced continuation blocks.
     """
     groups = []
     group = []
     for row in rows:
-        starts_new_variable = not row.lstrip().startswith("&=")
+        starts_new_variable = row.starts_new_variable
         if starts_new_variable and group:
             groups.append(group)
             group = []
@@ -307,7 +368,7 @@ def register(ipython):
             expression, unit_expression = _split_conversion(expression)
             # Inline comments control presentation:
             #   # plain text
-            #       Adds the plain text as an aligned explanation.
+            #       Adds the plain text to the native Typst comment column.
             #   # symbol=E_c
             #       Uses E_c as the rendered left-hand symbol instead of the
             #       Python variable name. This is handy when the Python-safe
@@ -340,56 +401,6 @@ def register(ipython):
 
 def load_ipython_extension(ipython):
     register(ipython)
-
-
-def _latex_text(text):
-    replacements = {
-        "\\": r"\textbackslash{}",
-        "&": r"\&",
-        "%": r"\%",
-        "#": r"\#",
-        "_": r"\_",
-        "{": r"\{",
-        "}": r"\}",
-    }
-    return "".join(replacements.get(char, char) for char in text)
-
-
-def _comment_latex(text):
-    pieces = []
-    math_token = re.compile(
-        r"[A-Za-z]+_\s*[A-Za-z0-9]+(?:\s*/\s*[A-Za-z]+)?|#\d+|#"
-    )
-    cursor = 0
-    for match in math_token.finditer(text):
-        if match.start() > cursor:
-            pieces.append(f"\\text{{{_latex_text(text[cursor:match.start()])}}}")
-        token = match.group(0)
-        if token.startswith("#"):
-            pieces.append(r"\#" + token[1:])
-        else:
-            pieces.append(_comment_math_latex(token))
-        cursor = match.end()
-    if cursor < len(text):
-        pieces.append(f"\\text{{{_latex_text(text[cursor:])}}}")
-    return r"\ ".join(piece for piece in pieces if piece)
-
-
-def _comment_math_latex(token):
-    token = re.sub(r"\s+", "", token)
-    if "/" in token:
-        variable, denominator = token.split("/", 1)
-    else:
-        variable, denominator = token, ""
-    if "_" in variable:
-        base, subscript = variable.split("_", 1)
-        variable_latex = f"{base}_{{{subscript}}}" if len(subscript) > 1 else f"{base}_{subscript}"
-    else:
-        variable_latex = variable
-    if denominator:
-        denominator_latex = rf"\mathrm{{{denominator}}}" if denominator.isalpha() else denominator
-        return rf"{variable_latex}/{denominator_latex}"
-    return variable_latex
 
 
 def _short_description(text):
@@ -543,12 +554,6 @@ def _short_description(text):
         if text == long:
             return short
     return text
-
-
-def _note_latex(description):
-    if not description:
-        return ""
-    return f" && \\quad {_comment_latex(_short_description(description))}"
 
 
 def _parse_comment(comment):
@@ -823,23 +828,26 @@ def _substituted_latex(expression, namespace, digits=4, wrap_functions=False):
 
 
 def _definition_row(calc_var, digits=4):
-    return rf"{calc_var.latex} &= {q_latex(calc_var.value, digits)}{_note_latex(calc_var.description)}"
+    return CalcRow(
+        lhs=calc_var.latex,
+        rhs=q_latex(calc_var.value, digits),
+        description=calc_var.description,
+    )
 
 
 def _calculation_rows(lhs, expression, result, namespace, digits=4, wrap_functions=False):
     symbolic = _symbolic_latex(expression, wrap_functions)
     substituted = _substituted_latex(expression, namespace, digits, wrap_functions)
     final = q_latex(result, digits)
-    note = _note_latex(lhs.description)
     if symbolic == substituted == final:
-        return [rf"{lhs.latex} &= {symbolic}{note}"]
+        return [CalcRow(lhs.latex, symbolic, lhs.description)]
     if substituted == final:
         return [
-            rf"{lhs.latex} &= {symbolic}{note}",
-            rf"&= {final}",
+            CalcRow(lhs.latex, symbolic, lhs.description),
+            CalcRow("", final),
         ]
     return [
-        rf"{lhs.latex} &= {symbolic}{note}",
-        rf"&= {substituted}",
-        rf"&= {final}",
+        CalcRow(lhs.latex, symbolic, lhs.description),
+        CalcRow("", substituted),
+        CalcRow("", final),
     ]
