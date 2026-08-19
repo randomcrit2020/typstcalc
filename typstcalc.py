@@ -17,6 +17,7 @@ Comment syntax after "#":
     # Explanation only
     # symbol=f'_c
     # symbol=E_c | Explanation rendered in the aligned comment column
+    # symbol=E_c; label=eq-elastic-modulus | Numbered and referenceable equation
 
 "symbol=" is only for display. It tells the magic what LaTeX/SymPy symbol to
 print on the left-hand side, while the Python variable name remains the name
@@ -29,6 +30,11 @@ To print a value that was already defined or calculated in an earlier
 %%typstcalc cell, write the variable name without "=":
 
     A_s_8 | Area of reinforcement # 8
+
+The first calculation cell in each IPython session automatically includes the
+raw Typst/MiTeX preamble required by the generated ``#calc-block`` calls.  Use
+``%%typstcalc ... no-preamble`` only when the document provides a custom
+``calc-block`` implementation itself.
 """
 
 import ast
@@ -64,6 +70,57 @@ MAX_ALIGNED_ROWS_PER_BLOCK = 9
 MAX_ALIGNED_ROWS_TOGETHER = 15
 WRAPPED_FUNCTION_ARGS_PER_ROW = 2
 
+# Raw Typst emitted before the first calculation block in each IPython session.
+# Keeping this template in the extension makes notebooks self-contained: users
+# do not need to know that generated rows call a document-level calc-block.
+TYPST_PREAMBLE = r'''```{=typst}
+#import "@preview/mitex:0.2.7": *
+
+#let calc-fit(body, side: left) = layout(size => {
+  let boxed = box(body)
+  let natural = measure(boxed)
+  let fitted = if natural.width > size.width {
+    let factor = size.width / natural.width
+    scale(x: factor * 100%, y: factor * 100%, reflow: true, boxed)
+  } else { boxed }
+  align(side, fitted)
+})
+
+#let calc-block(rows, note-align: left) = block(
+  width: 100%,
+  above: 12pt,
+  below: 12pt,
+)[
+  #let cells = ()
+  #for row in rows {
+    let equation = row.at(0)
+    let note = row.at(1)
+    let equation-label = if row.len() > 2 { row.at(2) } else { none }
+    let fitted-equation = calc-fit(equation, side: center)
+    let equation-body = if equation-label == none {
+      fitted-equation
+    } else {
+      [#math.equation(block: true, numbering: "(1)")[#fitted-equation]
+      #label(equation-label)]
+    }
+    cells.push(equation-body)
+    let note-body = if note == none { [] } else {
+      [#set par(justify: false); #text(note)]
+    }
+    cells.push(grid.cell(align: note-align + top, note-body))
+  }
+  #grid(
+    columns: (5.3fr, 3.7fr),
+    column-gutter: 4mm,
+    row-gutter: 4pt,
+    // Count padding in each row's height so tall MiTeX content cannot overlap.
+    inset: (top: 4pt, bottom: 4pt),
+    align: (center + top, note-align + top),
+    ..cells,
+  )
+]
+```'''
+
 
 @dataclass
 class CalcVar:
@@ -72,6 +129,7 @@ class CalcVar:
     value: object
     description: str = ""
     display_latex: str = ""
+    equation_label: str = ""
 
     @property
     def latex(self):
@@ -87,13 +145,14 @@ class CalcRow:
     lhs: str
     rhs: str
     description: str = ""
+    equation_label: str = ""
 
     @property
     def starts_new_variable(self):
         return bool(self.lhs)
 
 
-def _calc_var(name, symbol_text, value, description):
+def _calc_var(name, symbol_text, value, description, equation_label=""):
     """Create a calculation variable with an optional display-only symbol.
 
     Plain names such as "f_c" can safely go through SymPy's printer. Composite
@@ -104,7 +163,14 @@ def _calc_var(name, symbol_text, value, description):
     display_latex = ""
     if any(token in symbol_text for token in ("\\", "{", "}", " ")):
         display_latex = symbol_text
-    return CalcVar(name, sp.Symbol(symbol_text), value, description, display_latex)
+    return CalcVar(
+        name,
+        sp.Symbol(symbol_text),
+        value,
+        description,
+        display_latex,
+        equation_label,
+    )
 
 
 def mag(value, unit):
@@ -238,7 +304,11 @@ def typst_calc_block(rows):
         )
         description = _short_description(first.description)
         note = _typst_string(description) if description else "none"
-        output.append(f"  ({equation}, {note}),")
+        if first.equation_label:
+            label = _typst_string(first.equation_label)
+            output.append(f"  ({equation}, {note}, {label}),")
+        else:
+            output.append(f"  ({equation}, {note}),")
     output.extend(("))", "```"))
     return "\n".join(output)
 
@@ -248,6 +318,15 @@ def aligned_block(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK):
     for chunk in _chunk_aligned_rows(rows, max_rows=max_rows):
         blocks.append(typst_calc_block(chunk))
     return "\n\n".join(blocks)
+
+
+def typst_output(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK, include_preamble=False):
+    """Build self-contained raw Typst output for one calculation cell."""
+
+    calculations = aligned_block(rows, max_rows=max_rows)
+    if include_preamble:
+        return f"{TYPST_PREAMBLE}\n\n{calculations}"
+    return calculations
 
 
 def _chunk_aligned_rows(rows, max_rows=MAX_ALIGNED_ROWS_PER_BLOCK):
@@ -338,12 +417,23 @@ def register(ipython):
     namespace.setdefault("tan", tan)
     namespace.setdefault("cot", cot)
     namespace.setdefault("calc_vars", calc_vars)
+    preamble_emitted = False
 
     def typstcalc(line, cell):
+        nonlocal preamble_emitted
         options = set(line.strip().lower().split())
         define_mode = bool(options & {"define", "definitions", "defs", "vars"})
         wrap_functions = bool(options & {"wrap", "breaks", "linebreaks", "autobreaks", "auto-breaks", "cortes"})
         keep_aligned = bool(options & {"align", "aligned", "together"})
+        manual_preamble = bool(
+            options
+            & {
+                "no-preamble",
+                "nopreamble",
+                "manual-preamble",
+                "manualpreamble",
+            }
+        )
         max_rows = MAX_ALIGNED_ROWS_TOGETHER if keep_aligned else MAX_ALIGNED_ROWS_PER_BLOCK
         rows = []
         calc_rows = []
@@ -375,7 +465,7 @@ def register(ipython):
             #       name differs from the math notation, e.g. f_c -> f'_c.
             #   # symbol=E_c | Elastic modulus
             #       Uses the symbol before the pipe and the explanation after it.
-            symbol_text, description = _parse_comment(comment)
+            symbol_text, description, equation_label = _parse_comment(comment)
 
             result = eval(expression, namespace)
             if unit_expression:
@@ -384,17 +474,26 @@ def register(ipython):
                 result = result.to(eval(unit_expression, namespace))
 
             namespace[name] = result
-            calc_vars[name] = _calc_var(name, symbol_text, result, description)
+            calc_vars[name] = _calc_var(
+                name, symbol_text, result, description, equation_label
+            )
 
             if define_mode:
                 rows.append(_definition_row(calc_vars[name]))
             else:
                 calc_rows.extend(_calculation_rows(calc_vars[name], expression, result, namespace, wrap_functions=wrap_functions))
 
-        if define_mode and rows:
-            display(Markdown(aligned_block(rows, max_rows=max_rows)))
-        elif calc_rows:
-            display(Markdown(aligned_block(calc_rows, max_rows=max_rows)))
+        output_rows = rows if define_mode else calc_rows
+        if output_rows:
+            if manual_preamble:
+                preamble_emitted = True
+            output = typst_output(
+                output_rows,
+                max_rows=max_rows,
+                include_preamble=not preamble_emitted,
+            )
+            preamble_emitted = True
+            display(Markdown(output))
 
     ipython.register_magic_function(typstcalc, "cell", "typstcalc")
 
@@ -556,17 +655,45 @@ def _short_description(text):
     return text
 
 
+_COMMENT_DIRECTIVE_SPLIT = re.compile(r";\s*(?=(?:symbol|label)\s*=)")
+_TYPST_LABEL = re.compile(r"^[A-Za-z0-9_.:-]+$")
+
+
 def _parse_comment(comment):
     comment = comment.strip()
     if not comment:
-        return None, ""
-    if comment.startswith("symbol="):
-        body = comment.removeprefix("symbol=").strip()
-        if "|" in body:
-            symbol, description = body.split("|", 1)
-            return symbol.strip(), description.strip()
-        return body.strip(), ""
-    return None, comment
+        return None, "", ""
+
+    metadata, separator, description = comment.partition("|")
+    metadata = metadata.strip()
+    if not re.match(r"^(?:symbol|label)\s*=", metadata):
+        return None, comment, ""
+
+    directives = {}
+    for directive in _COMMENT_DIRECTIVE_SPLIT.split(metadata):
+        key, equals, value = directive.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if not equals or key not in {"symbol", "label"}:
+            raise ValueError(f"Invalid typstcalc comment directive: {directive!r}")
+        if key in directives:
+            raise ValueError(f"Duplicate typstcalc comment directive: {key}")
+        if not value:
+            raise ValueError(f"typstcalc comment directive {key!r} cannot be empty")
+        directives[key] = value
+
+    equation_label = directives.get("label", "")
+    if equation_label and not _TYPST_LABEL.fullmatch(equation_label):
+        raise ValueError(
+            "Typst equation labels may contain only letters, numbers, '_', '-', "
+            "':', and '.'"
+        )
+
+    return (
+        directives.get("symbol"),
+        description.strip() if separator else "",
+        equation_label,
+    )
 
 
 def _parse_reference_line(line):
@@ -832,6 +959,7 @@ def _definition_row(calc_var, digits=4):
         lhs=calc_var.latex,
         rhs=q_latex(calc_var.value, digits),
         description=calc_var.description,
+        equation_label=calc_var.equation_label,
     )
 
 
@@ -840,14 +968,14 @@ def _calculation_rows(lhs, expression, result, namespace, digits=4, wrap_functio
     substituted = _substituted_latex(expression, namespace, digits, wrap_functions)
     final = q_latex(result, digits)
     if symbolic == substituted == final:
-        return [CalcRow(lhs.latex, symbolic, lhs.description)]
+        return [CalcRow(lhs.latex, symbolic, lhs.description, lhs.equation_label)]
     if substituted == final:
         return [
-            CalcRow(lhs.latex, symbolic, lhs.description),
+            CalcRow(lhs.latex, symbolic, lhs.description, lhs.equation_label),
             CalcRow("", final),
         ]
     return [
-        CalcRow(lhs.latex, symbolic, lhs.description),
+        CalcRow(lhs.latex, symbolic, lhs.description, lhs.equation_label),
         CalcRow("", substituted),
         CalcRow("", final),
     ]

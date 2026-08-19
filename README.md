@@ -138,7 +138,7 @@ required.
 Install the Python dependencies in a project managed by `uv`:
 
 ```powershell
-uv add ipython pint sympy
+uv add ipykernel ipython nbclient nbformat pint sympy
 ```
 
 Place `typstcalc.py` in the notebook's working directory or elsewhere on the
@@ -181,6 +181,75 @@ Initialize the submodule after cloning an existing parent project:
 ```powershell
 git submodule update --init --recursive
 ```
+
+### Minimal reproducible notebook in another project
+
+The following sequence is sufficient for a new calculation report. A manual
+Typst preamble is not part of the setup because the extension emits it
+automatically.
+
+1. Create or update the project environment and initialize the submodule:
+
+   ```powershell
+   uv add ipykernel ipython nbclient nbformat pint sympy
+   git submodule update --init --recursive
+   uv sync
+   ```
+
+2. Put this Quarto front matter in the first **Markdown** cell of the notebook:
+
+   ```yaml
+   ---
+   title: "Calculation report"
+   format:
+     typst:
+       papersize: a4
+       toc: true
+       number-sections: true
+   execute:
+     echo: false
+     warning: false
+     error: false
+   jupyter: python3
+   ---
+   ```
+
+3. Put this initialization in the first **code** cell:
+
+   ```python
+   import sys
+   from pathlib import Path
+
+   typstcalc_path = str((Path.cwd() / "typstcalc-src").resolve())
+   if typstcalc_path not in sys.path:
+       sys.path.insert(0, typstcalc_path)
+
+   %load_ext typstcalc
+   ```
+
+4. Define inputs and calculate results in separate cells:
+
+   ```python
+   %%typstcalc define
+   P = 120 * ureg.kN       # Applied axial force
+   A = 2000 * ureg.mm**2   # Cross-sectional area
+   ```
+
+   ```python
+   %%typstcalc
+   sigma = P / A >> ureg.MPa  # Axial stress
+   ```
+
+5. Execute the notebook and render it from the project root:
+
+   ```powershell
+   uv run quarto render calculation.ipynb --to typst
+   ```
+
+The first `%%typstcalc` output contains the hidden raw Typst definitions and
+the first calculation grid. Later cells emit only their calculation grids.
+Starting a fresh kernel resets this once-per-session behavior, which keeps a
+fully executed notebook self-contained and reproducible.
 
 ## Basic calculation
 
@@ -313,10 +382,46 @@ phi_V_n = 0.75 * 420 * ureg.kN  # symbol=\phi V_n | Design shear resistance
 - `# Description` adds an explanatory note.
 - `# symbol=E_c` changes only the displayed mathematical symbol.
 - `# symbol=E_c | Description` sets both the symbol and note.
+- `# label=eq-elastic-modulus | Description` numbers one equation and gives it
+  a Typst label that can be referenced as `@eq-elastic-modulus`.
+- Combine both directives with a semicolon:
+  `# symbol=E_c; label=eq-elastic-modulus | Description`.
 - `symbol=` accepts LaTeX/MiTeX notation, not native Typst math syntax.
 - Fractions must be explicit: write `# symbol=\frac{q_2}{q_1}` to display
   $\frac{q_2}{q_1}$. Do **not** write `# symbol=q_2/q_1`; that text is treated
   as a symbol name and does not describe a fraction.
+
+### Number and reference one equation
+
+Equation numbering is opt-in. Add a valid Typst label only to the calculation
+that should be numbered:
+
+```python
+ratio_q = q_2 / q_1  # symbol=\frac{q_2}{q_1}; label=eq-capacity-ratio | Capacity ratio
+```
+
+Then reference it in Typst text with `@eq-capacity-ratio`. Typst supplies the
+localized equation supplement, the current number, and a link to the equation.
+For example, with Spanish text settings, `La @eq-capacity-ratio gobierna...`
+renders like "La Ecuación 1 gobierna...". Renumbering remains automatic when
+another labeled equation is inserted earlier. Unlabeled calculations do not
+enter the equation counter.
+
+In a Quarto Markdown or notebook cell, use a raw Typst inline because Quarto
+cannot discover labels nested inside generated raw Typst blocks:
+
+```markdown
+La `#ref(<eq-capacity-ratio>)`{=typst} gobierna el diseño.
+```
+
+Writing plain `@eq-capacity-ratio` in that Markdown cell asks Quarto to resolve
+the label before Typst compilation and produces an unresolved-cross-reference
+warning.
+
+Labels may contain letters, numbers, `_`, `-`, `:`, and `.`. Use a unique,
+descriptive `eq-...` label. An invalid or empty label raises an error instead of
+silently generating a broken reference. The label belongs to that rendered
+occurrence; printing the same stored variable again does not duplicate it.
 
 ### Greek letters
 
@@ -405,10 +510,15 @@ V_u = max(V_dead, V_live, V_wind, V_seismic)  # Governing shear demand
 
 Equivalent option names include `breaks`, `linebreaks`, and `autobreaks`.
 
-## Typst preamble
+## Automatic Typst preamble
 
 Generated output uses raw Typst blocks containing row data passed to
-`#calc-block(...)`. The Typst document therefore needs definitions similar to:
+`#calc-block(...)`. `typstcalc` automatically emits the required MiTeX import,
+`calc-fit`, and `calc-block` definitions before the first rendered calculation
+in each IPython session. A normal notebook therefore does **not** need to copy
+or maintain a Typst preamble manually.
+
+The automatically emitted template is equivalent to:
 
 ```typst
 #import "@preview/mitex:0.2.7": *
@@ -430,8 +540,17 @@ Generated output uses raw Typst blocks containing row data passed to
 )[
   #let cells = ()
   #for row in rows {
-    let (equation, note) = row
-    cells.push(calc-fit(equation, side: center))
+    let equation = row.at(0)
+    let note = row.at(1)
+    let equation-label = if row.len() > 2 { row.at(2) } else { none }
+    let fitted-equation = calc-fit(equation, side: center)
+    let equation-body = if equation-label == none {
+      fitted-equation
+    } else {
+      [#math.equation(block: true, numbering: "(1)")[#fitted-equation]
+      #label(equation-label)]
+    }
+    cells.push(equation-body)
     let note-body = if note == none { [] } else {
       [#set par(justify: false); #text(note)]
     }
@@ -441,6 +560,8 @@ Generated output uses raw Typst blocks containing row data passed to
     columns: (5.3fr, 3.7fr),
     column-gutter: 4mm,
     row-gutter: 4pt,
+    // Count padding in each row's height so tall MiTeX content cannot overlap.
+    inset: (top: 4pt, bottom: 4pt),
     align: (center + top, note-align + top),
     ..cells,
   )
@@ -455,7 +576,22 @@ group only when it is wider than the assigned equation column, preserving its
 equals alignment and consistent typography. Comments remain native Typst text
 in a wide column anchored at the right page margin. They are left-aligned by
 default for readable multiline wrapping; set `note-align: right` if a
-right-aligned text edge is preferred.
+right-aligned text edge is preferred. The vertical `inset` is included in the
+measured height of every grid row, so tall fractions and stacked units such as
+`kN/m³` cannot overflow into adjacent equations.
+
+Advanced documents may provide a custom `calc-block` instead. Put the custom
+Typst definitions earlier in the document and add `no-preamble` to the first
+calculation cell so the extension does not replace them:
+
+```python
+%%typstcalc define no-preamble
+P = 120 * ureg.kN  # Applied load
+```
+
+Equivalent suppression options are `nopreamble`, `manual-preamble`, and
+`manualpreamble`. The choice applies to the rest of the current IPython
+session. Use it only when the document deliberately owns a custom template.
 
 The magic automatically divides large calculation groups into page-friendly
 blocks and rebalances short trailing blocks while keeping each variable
