@@ -4,6 +4,16 @@ import typstcalc
 
 
 class NativeTypstGridTests(unittest.TestCase):
+    def test_explicit_fraction_display_symbol_preserves_latex(self):
+        variable = typstcalc._calc_var(
+            name="ratio_q_explicit",
+            symbol_text=r"\frac{q_2}{q_1}",
+            value=0.5,
+            description="Capacity ratio",
+        )
+
+        self.assertEqual(variable.latex, r"\frac{q_2}{q_1}")
+
     def test_definition_rows_keep_math_and_comment_separate(self):
         variable = typstcalc.CalcVar(
             name="force",

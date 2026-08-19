@@ -313,6 +313,10 @@ phi_V_n = 0.75 * 420 * ureg.kN  # symbol=\phi V_n | Design shear resistance
 - `# Description` adds an explanatory note.
 - `# symbol=E_c` changes only the displayed mathematical symbol.
 - `# symbol=E_c | Description` sets both the symbol and note.
+- `symbol=` accepts LaTeX/MiTeX notation, not native Typst math syntax.
+- Fractions must be explicit: write `# symbol=\frac{q_2}{q_1}` to display
+  $\frac{q_2}{q_1}$. Do **not** write `# symbol=q_2/q_1`; that text is treated
+  as a symbol name and does not describe a fraction.
 
 ### Greek letters
 
