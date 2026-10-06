@@ -808,6 +808,40 @@ def _wrap_function_args(args, args_per_row=WRAPPED_FUNCTION_ARGS_PER_ROW):
     return r"\substack{" + r"\\".join(rows) + "}"
 
 
+def _edge_leaf(node, side):
+    """Return the leftmost or rightmost printed leaf of a product chain."""
+    while True:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            node = node.left if side == "left" else node.right
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow) and side == "left":
+            node = node.left
+        else:
+            return node
+
+
+def _is_numeric_leaf(node):
+    return isinstance(node, ast.Constant) and isinstance(node.value, (int, float))
+
+
+def _symbolic_product_latex(left_node, right_node, left, right):
+    """Join two factors so adjacent numbers, units and symbols stay readable."""
+    if _needs_group(left_node):
+        left = _wrap_latex(left)
+    if _needs_group(right_node) or isinstance(right_node, ast.UnaryOp):
+        right = _wrap_latex(right)
+    if not left or not right:
+        return left or right
+    left_is_unit = _unit_latex_from_ast(left_node) is not None
+    right_is_unit = _unit_latex_from_ast(right_node) is not None
+    if right_is_unit and not left_is_unit:
+        return rf"{left}\ {right}"
+    right_leaf = _edge_leaf(right_node, "left")
+    left_ends_in_unit = _unit_latex_from_ast(_edge_leaf(left_node, "right")) is not None
+    if _is_numeric_leaf(right_leaf) or left_ends_in_unit or left_is_unit:
+        return rf"{left} \cdot {right}"
+    return f"{left} {right}"
+
+
 def _symbol_latex_from_ast(node, wrap_functions=False):
     unit_latex = _unit_latex_from_ast(node)
     if unit_latex is not None:
@@ -833,9 +867,7 @@ def _symbol_latex_from_ast(node, wrap_functions=False):
         if isinstance(node.op, ast.Sub):
             return rf"{left} - {right}"
         if isinstance(node.op, ast.Mult):
-            if _unit_latex_from_ast(node.left) is not None or _unit_latex_from_ast(node.right) is not None:
-                return r"\ ".join(part for part in (left, right) if part)
-            return " ".join(part for part in (left, right) if part)
+            return _symbolic_product_latex(node.left, node.right, left, right)
         if isinstance(node.op, ast.Div):
             return rf"\frac{{{left}}}{{{right}}}"
         if isinstance(node.op, ast.Pow):

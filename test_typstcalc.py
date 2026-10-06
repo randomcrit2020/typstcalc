@@ -165,5 +165,25 @@ class NativeTypstGridTests(unittest.TestCase):
         self.assertTrue(all(chunk[0].starts_new_variable for chunk in chunks))
 
 
+class SymbolicProductTests(unittest.TestCase):
+    def test_adjacent_numeric_factors_use_cdot(self):
+        self.assertEqual(typstcalc._symbolic_latex("0.75*0.2*P"), r"0.75 \cdot 0.2 P")
+
+    def test_unit_followed_by_symbol_uses_cdot(self):
+        self.assertEqual(
+            typstcalc._symbolic_latex("0.8*ureg.ksi*(B*Y)"),
+            r"0.8\ \mathrm{ksi} \cdot B Y",
+        )
+
+    def test_sum_factor_is_grouped(self):
+        self.assertEqual(typstcalc._symbolic_latex("(a+b)*c"), r"\left(a + b\right) c")
+
+    def test_negative_factor_is_grouped(self):
+        self.assertEqual(typstcalc._symbolic_latex("a*-b"), r"a \left(-b\right)")
+
+    def test_coefficient_before_symbols_stays_implicit(self):
+        self.assertEqual(typstcalc._symbolic_latex("2*a*b"), "2 a b")
+
+
 if __name__ == "__main__":
     unittest.main()
