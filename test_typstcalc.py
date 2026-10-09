@@ -184,6 +184,40 @@ class SymbolicProductTests(unittest.TestCase):
     def test_coefficient_before_symbols_stays_implicit(self):
         self.assertEqual(typstcalc._symbolic_latex("2*a*b"), "2 a b")
 
+    def test_subtracted_sum_is_grouped(self):
+        self.assertEqual(typstcalc._symbolic_latex("a-(b-c)"), r"a - \left(b - c\right)")
+        self.assertEqual(typstcalc._symbolic_latex("a-(b+c)"), r"a - \left(b + c\right)")
+
+    def test_negated_sum_is_grouped(self):
+        self.assertEqual(typstcalc._symbolic_latex("-(a+b)"), r"-\left(a + b\right)")
+
+
+class SubstitutedGroupingTests(unittest.TestCase):
+    """Substituted-value rows must keep the grouping of the source expression."""
+
+    def setUp(self):
+        self.ns = {"ureg": typstcalc.ureg}
+
+    def sub(self, expression):
+        return typstcalc._substituted_latex(expression, self.ns)
+
+    def test_sum_factor_is_grouped(self):
+        self.assertEqual(self.sub("2*(3-1)"), r"2 \cdot \left(3 - 1\right)")
+        self.assertEqual(self.sub("(3-1)*2"), r"\left(3 - 1\right) \cdot 2")
+
+    def test_sum_factor_in_inline_division_is_grouped(self):
+        self.assertEqual(self.sub("5-(1-0.25)*20/2"), r"5 - \left(1 - 0.25\right) \cdot 20 / 2")
+
+    def test_subtracted_sum_is_grouped(self):
+        self.assertEqual(self.sub("5-(3-1)"), r"5 - \left(3 - 1\right)")
+
+    def test_negated_sum_is_grouped(self):
+        self.assertEqual(self.sub("-(3+1)"), r"-\left(3 + 1\right)")
+
+    def test_ungrouped_terms_stay_plain(self):
+        self.assertEqual(self.sub("5-3*2"), r"5 - 3 \cdot 2")
+        self.assertEqual(self.sub("5+3-1"), r"5 + 3 - 1")
+
 
 if __name__ == "__main__":
     unittest.main()

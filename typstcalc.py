@@ -858,13 +858,17 @@ def _symbol_latex_from_ast(node, wrap_functions=False):
         return sp.latex(sp.Symbol(node.attr))
     if isinstance(node, ast.UnaryOp):
         value = _symbol_latex_from_ast(node.operand, wrap_functions)
-        return f"-{value}" if isinstance(node.op, ast.USub) else value
+        if isinstance(node.op, ast.USub):
+            return f"-{_wrap_latex(value) if _needs_group(node.operand) else value}"
+        return value
     if isinstance(node, ast.BinOp):
         left = _symbol_latex_from_ast(node.left, wrap_functions)
         right = _symbol_latex_from_ast(node.right, wrap_functions)
         if isinstance(node.op, ast.Add):
             return rf"{left} + {right}"
         if isinstance(node.op, ast.Sub):
+            if _needs_group(node.right):
+                right = _wrap_latex(right)
             return rf"{left} - {right}"
         if isinstance(node.op, ast.Mult):
             return _symbolic_product_latex(node.left, node.right, left, right)
@@ -922,7 +926,9 @@ def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_func
         return sp.latex(sp.Symbol(node.attr))
     if isinstance(node, ast.UnaryOp):
         value = _value_latex_from_ast(node.operand, namespace, digits, inline_div, wrap_functions)
-        return f"-{value}" if isinstance(node.op, ast.USub) else value
+        if isinstance(node.op, ast.USub):
+            return f"-{_wrap_latex(value) if _needs_group(node.operand) else value}"
+        return value
     if isinstance(node, ast.BinOp):
         use_inline_div = inline_div or (isinstance(node.op, ast.Div) and (_is_mul_div(node.left) or _is_mul_div(node.right)))
         left = _value_latex_from_ast(node.left, namespace, digits, use_inline_div, wrap_functions)
@@ -930,8 +936,15 @@ def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_func
         if isinstance(node.op, ast.Add):
             return rf"{left} + {right}"
         if isinstance(node.op, ast.Sub):
+            if _needs_group(node.right):
+                right = _wrap_latex(right)
             return rf"{left} - {right}"
         if isinstance(node.op, ast.Mult):
+            # Sums and differences keep their grouping as factors.
+            if _needs_group(node.left):
+                left = _wrap_latex(left)
+            if _needs_group(node.right):
+                right = _wrap_latex(right)
             if _unit_latex_from_ast(node.left) is not None or _unit_latex_from_ast(node.right) is not None:
                 return r"\ ".join(part for part in (left, right) if part)
             return r" \cdot ".join(part for part in (left, right) if part)
@@ -939,7 +952,7 @@ def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_func
             if _needs_group(node.left) or _needs_group(node.right):
                 return rf"\frac{{{left}}}{{{right}}}"
             if use_inline_div:
-                if isinstance(node.left, ast.BinOp) and isinstance(node.left.op, ast.Div):
+                if isinstance(node.left, ast.BinOp) and isinstance(node.left.op, (ast.Div, ast.Add, ast.Sub)):
                     left = _wrap_latex(left)
                 if isinstance(node.right, ast.BinOp):
                     right = _wrap_latex(right)
