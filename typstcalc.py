@@ -220,10 +220,6 @@ def _needs_group(node):
     return isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub))
 
 
-def _is_mul_div(node):
-    return isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div))
-
-
 def _unit_from_ast(node):
     if isinstance(node, ast.Attribute):
         if isinstance(node.value, ast.Name) and node.value.id == "ureg":
@@ -933,7 +929,7 @@ def _symbolic_latex(expression, wrap_functions=False):
     return _symbol_latex_from_ast(node, wrap_functions)
 
 
-def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_functions=False):
+def _value_latex_from_ast(node, namespace, digits=4, wrap_functions=False):
     unit_latex = _unit_latex_from_ast(node)
     if unit_latex is not None:
         return unit_latex
@@ -948,14 +944,13 @@ def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_func
             return ""
         return sp.latex(sp.Symbol(node.attr))
     if isinstance(node, ast.UnaryOp):
-        value = _value_latex_from_ast(node.operand, namespace, digits, inline_div, wrap_functions)
+        value = _value_latex_from_ast(node.operand, namespace, digits, wrap_functions)
         if isinstance(node.op, ast.USub):
             return f"-{_wrap_latex(value) if _needs_group(node.operand) else value}"
         return value
     if isinstance(node, ast.BinOp):
-        use_inline_div = inline_div or (isinstance(node.op, ast.Div) and (_is_mul_div(node.left) or _is_mul_div(node.right)))
-        left = _value_latex_from_ast(node.left, namespace, digits, use_inline_div, wrap_functions)
-        right = _value_latex_from_ast(node.right, namespace, digits, use_inline_div, wrap_functions)
+        left = _value_latex_from_ast(node.left, namespace, digits, wrap_functions)
+        right = _value_latex_from_ast(node.right, namespace, digits, wrap_functions)
         if isinstance(node.op, ast.Add):
             return rf"{left} + {right}"
         if isinstance(node.op, ast.Sub):
@@ -972,14 +967,7 @@ def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_func
                 return r"\ ".join(part for part in (left, right) if part)
             return r" \cdot ".join(part for part in (left, right) if part)
         if isinstance(node.op, ast.Div):
-            if _needs_group(node.left) or _needs_group(node.right):
-                return rf"\frac{{{left}}}{{{right}}}"
-            if use_inline_div:
-                if isinstance(node.left, ast.BinOp) and isinstance(node.left.op, (ast.Div, ast.Add, ast.Sub)):
-                    left = _wrap_latex(left)
-                if isinstance(node.right, ast.BinOp):
-                    right = _wrap_latex(right)
-                return rf"{left} / {right}"
+            # Same fraction layout as the symbolic row, so each value sits where its symbol was.
             return rf"\frac{{{left}}}{{{right}}}"
         if isinstance(node.op, ast.Pow):
             if (
@@ -991,29 +979,29 @@ def _value_latex_from_ast(node, namespace, digits=4, inline_div=False, wrap_func
             return rf"{left}^{{{right}}}"
     if isinstance(node, ast.Call):
         if isinstance(node.func, ast.Name) and node.func.id == "sqrt":
-            return rf"\sqrt{{{_value_latex_from_ast(node.args[0], namespace, digits, inline_div, wrap_functions)}}}"
+            return rf"\sqrt{{{_value_latex_from_ast(node.args[0], namespace, digits, wrap_functions)}}}"
         if isinstance(node.func, ast.Name) and node.func.id in TRIG_FUNCTION_NAMES:
             func_latex = TRIG_LATEX[node.func.id]
-            arg = _value_latex_from_ast(node.args[0], namespace, digits, inline_div, wrap_functions)
+            arg = _value_latex_from_ast(node.args[0], namespace, digits, wrap_functions)
             return rf"{func_latex}\left({arg}\right)"
         if isinstance(node.func, ast.Name) and node.func.id == "ceil":
-            return rf"\left\lceil {_value_latex_from_ast(node.args[0], namespace, digits, inline_div, wrap_functions)} \right\rceil"
+            return rf"\left\lceil {_value_latex_from_ast(node.args[0], namespace, digits, wrap_functions)} \right\rceil"
         if isinstance(node.func, ast.Name) and node.func.id == "floor":
-            return rf"\left\lfloor {_value_latex_from_ast(node.args[0], namespace, digits, inline_div, wrap_functions)} \right\rfloor"
+            return rf"\left\lfloor {_value_latex_from_ast(node.args[0], namespace, digits, wrap_functions)} \right\rfloor"
         if isinstance(node.func, ast.Name) and node.func.id == "abs":
-            return rf"\left|{_value_latex_from_ast(node.args[0], namespace, digits, inline_div, wrap_functions)}\right|"
+            return rf"\left|{_value_latex_from_ast(node.args[0], namespace, digits, wrap_functions)}\right|"
         if isinstance(node.func, ast.Name) and node.func.id in MAX_FUNCTION_NAMES:
-            args = [_value_latex_from_ast(arg, namespace, digits, inline_div, wrap_functions) for arg in node.args]
+            args = [_value_latex_from_ast(arg, namespace, digits, wrap_functions) for arg in node.args]
             args = _wrap_function_args(args) if wrap_functions else ", ".join(args)
             return rf"\max\left({args}\right)"
         if isinstance(node.func, ast.Name) and node.func.id in MIN_FUNCTION_NAMES:
-            args = [_value_latex_from_ast(arg, namespace, digits, inline_div, wrap_functions) for arg in node.args]
+            args = [_value_latex_from_ast(arg, namespace, digits, wrap_functions) for arg in node.args]
             args = _wrap_function_args(args) if wrap_functions else ", ".join(args)
             return rf"\min\left({args}\right)"
         if isinstance(node.func, ast.Name) and node.func.id == "mag":
             return q_latex(eval(ast.unparse(node), namespace), digits)
         if isinstance(node.func, ast.Attribute) and node.func.attr == "to":
-            return _value_latex_from_ast(node.func.value, namespace, digits, inline_div, wrap_functions)
+            return _value_latex_from_ast(node.func.value, namespace, digits, wrap_functions)
     raise ValueError(f"Unsupported expression syntax: {ast.unparse(node)}")
 
 

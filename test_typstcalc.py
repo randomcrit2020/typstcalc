@@ -216,8 +216,14 @@ class SubstitutedGroupingTests(unittest.TestCase):
         self.assertEqual(self.sub("2*(3-1)"), r"2 \cdot \left(3 - 1\right)")
         self.assertEqual(self.sub("(3-1)*2"), r"\left(3 - 1\right) \cdot 2")
 
-    def test_sum_factor_in_inline_division_is_grouped(self):
-        self.assertEqual(self.sub("5-(1-0.25)*20/2"), r"5 - \left(1 - 0.25\right) \cdot 20 / 2")
+    def test_sum_factor_in_division_is_grouped(self):
+        self.assertEqual(self.sub("5-(1-0.25)*20/2"), r"5 - \frac{\left(1 - 0.25\right) \cdot 20}{2}")
+
+    def test_division_keeps_the_fraction_layout_of_the_symbolic_row(self):
+        # a·2·b/c·d: the symbolic row is \frac{a 2 b}{c} d, so the values stack the same way.
+        self.assertEqual(typstcalc._symbolic_latex("a*2*b/c*d"), r"\frac{a \cdot 2 b}{c} d")
+        self.assertEqual(self.sub("0.7*2*3/4*5"), r"\frac{0.7 \cdot 2 \cdot 3}{4} \cdot 5")
+        self.assertEqual(self.sub("2*3/(4*5)"), r"\frac{2 \cdot 3}{4 \cdot 5}")
 
     def test_subtracted_sum_is_grouped(self):
         self.assertEqual(self.sub("5-(3-1)"), r"5 - \left(3 - 1\right)")
