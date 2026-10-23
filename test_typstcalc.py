@@ -114,6 +114,17 @@ class NativeTypstGridTests(unittest.TestCase):
         self.assertEqual(rows[0].description, "Calculated area")
         self.assertTrue(all(not row.starts_new_variable for row in rows[1:]))
 
+    def test_note_math_segments_render_as_inline_mitex(self):
+        note = typstcalc._typst_note(r"Equilibrium, equal to $T_{\mathrm{max}}$")
+
+        self.assertEqual(
+            note, '[#"Equilibrium, equal to "#mi("T_{\\\\mathrm{max}}")]'
+        )
+
+    def test_note_without_paired_dollars_stays_a_string(self):
+        self.assertEqual(typstcalc._typst_note("Cost in $"), '"Cost in $"')
+        self.assertEqual(typstcalc._typst_note(r"From \$5 to \$8"), '"From $5 to $8"')
+
     def test_typst_block_groups_equation_trails_and_uses_safe_strings(self):
         rows = [
             typstcalc.CalcRow("a", "x + y", 'Quoted "note" #1'),

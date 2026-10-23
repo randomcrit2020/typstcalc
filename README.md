@@ -390,6 +390,10 @@ phi_V_n = 0.75 * 420 * ureg.kN  # symbol=\phi V_n | Design shear resistance
 - Fractions must be explicit: write `# symbol=\frac{q_2}{q_1}` to display
   $\frac{q_2}{q_1}$. Do **not** write `# symbol=q_2/q_1`; that text is treated
   as a symbol name and does not describe a fraction.
+- Math inside a description goes between dollar signs, in the same LaTeX/MiTeX
+  notation as `symbol=`: `# Equilibrium, equal to $T_{\mathrm{max}}$` renders
+  the symbol inline. Write `\$` for a literal dollar sign; a description
+  without a matched pair of dollar signs stays plain text.
 
 ### Number and reference one equation
 

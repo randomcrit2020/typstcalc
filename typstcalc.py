@@ -261,6 +261,28 @@ def _typst_string(text):
     return json.dumps(text, ensure_ascii=False)
 
 
+_NOTE_DOLLAR = re.compile(r"(?<!\\)\$")
+
+
+def _typst_note(text):
+    """Serialize a description; paired ``$...$`` segments render as inline MiTeX.
+
+    Notes without a matched pair of unescaped dollar signs stay plain Typst
+    strings. ``\\$`` writes a literal dollar sign.
+    """
+
+    parts = _NOTE_DOLLAR.split(text)
+    if len(parts) < 3 or len(parts) % 2 == 0:
+        return _typst_string(text.replace("\\$", "$"))
+    pieces = []
+    for index, part in enumerate(parts):
+        if index % 2:
+            pieces.append(f"#mi({_typst_string(part)})")
+        elif part:
+            pieces.append(f"#{_typst_string(part.replace(chr(92) + '$', '$'))}")
+    return "[" + "".join(pieces) + "]"
+
+
 def _mitex_content(latex):
     return f"mitex({_typst_string(latex)})" if latex else "[]"
 
@@ -286,7 +308,8 @@ def typst_calc_block(rows):
     Each variable's complete equation trail remains in one MiTeX ``aligned``
     group so its equals signs, line spacing, and scale stay consistent.
     Descriptions are emitted as plain Typst strings so the document can wrap
-    and align them without allowing the block to exceed its text area.
+    and align them without allowing the block to exceed its text area; only
+    their ``$...$`` segments become inline MiTeX math.
     """
 
     output = ["```{=typst}", "#calc-block(("]
@@ -303,7 +326,7 @@ def typst_calc_block(rows):
             "\\begin{aligned}\n" + equation_latex + "\n\\end{aligned}"
         )
         description = _short_description(first.description)
-        note = _typst_string(description) if description else "none"
+        note = _typst_note(description) if description else "none"
         if first.equation_label:
             label = _typst_string(first.equation_label)
             output.append(f"  ({equation}, {note}, {label}),")
