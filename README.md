@@ -394,6 +394,12 @@ phi_V_n = 0.75 * 420 * ureg.kN  # symbol=\phi V_n | Design shear resistance
   notation as `symbol=`: `# Equilibrium, equal to $T_{\mathrm{max}}$` renders
   the symbol inline. Write `\$` for a literal dollar sign; a description
   without a matched pair of dollar signs stays plain text.
+- `@label` inside a description, outside the dollar signs, renders as a Typst
+  reference to that label: `# Design load (@tbl-loads)` renders like
+  "Design load (Table 3)". Any element with a Typst label works: tables,
+  figures, headings or equations numbered with `label=`. Write `\@` for a
+  literal at sign; an `@` preceded by a letter or digit (an e-mail address)
+  or followed by a space stays plain text.
 
 ### Number and reference one equation
 

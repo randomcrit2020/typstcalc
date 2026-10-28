@@ -125,6 +125,27 @@ class NativeTypstGridTests(unittest.TestCase):
         self.assertEqual(typstcalc._typst_note("Cost in $"), '"Cost in $"')
         self.assertEqual(typstcalc._typst_note(r"From \$5 to \$8"), '"From $5 to $8"')
 
+    def test_note_references_render_as_typst_refs(self):
+        note = typstcalc._typst_note("Design load (@tbl-loads).")
+
+        self.assertEqual(
+            note, '[#"Design load ("#ref(label("tbl-loads"))#")."]'
+        )
+
+    def test_note_references_combine_with_math(self):
+        note = typstcalc._typst_note(r"Limit $V_u$ from @eq-shear:max, see @sec-2")
+
+        self.assertEqual(
+            note,
+            '[#"Limit "#mi("V_u")#" from "#ref(label("eq-shear:max"))'
+            '#", see "#ref(label("sec-2"))]',
+        )
+
+    def test_note_at_signs_that_are_not_references_stay_text(self):
+        self.assertEqual(typstcalc._typst_note("Mail a@b.com"), '"Mail a@b.com"')
+        self.assertEqual(typstcalc._typst_note(r"Literal \@tbl-loads"), '"Literal @tbl-loads"')
+        self.assertEqual(typstcalc._typst_note("Price @ 5"), '"Price @ 5"')
+
     def test_typst_block_groups_equation_trails_and_uses_safe_strings(self):
         rows = [
             typstcalc.CalcRow("a", "x + y", 'Quoted "note" #1'),

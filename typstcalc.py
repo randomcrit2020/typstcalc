@@ -258,24 +258,51 @@ def _typst_string(text):
 
 
 _NOTE_DOLLAR = re.compile(r"(?<!\\)\$")
+# Typst reference syntax inside descriptions: "@tbl-loads" outside math. A
+# preceding word character (an e-mail address) or backslash keeps the "@" as
+# text, and trailing sentence punctuation is not part of the label.
+_NOTE_REF = re.compile(r"(?<![\w\\])@([A-Za-z_](?:[\w\-:.]*[\w\-])?)")
+
+
+def _note_unescape(text):
+    return text.replace("\\$", "$").replace("\\@", "@")
+
+
+def _typst_text_pieces(text):
+    """Split plain description text into Typst string and reference pieces."""
+
+    pieces = []
+    position = 0
+    for match in _NOTE_REF.finditer(text):
+        if match.start() > position:
+            pieces.append(f"#{_typst_string(_note_unescape(text[position:match.start()]))}")
+        pieces.append(f"#ref(label({_typst_string(match.group(1))}))")
+        position = match.end()
+    if position < len(text):
+        pieces.append(f"#{_typst_string(_note_unescape(text[position:]))}")
+    return pieces
 
 
 def _typst_note(text):
-    """Serialize a description; paired ``$...$`` segments render as inline MiTeX.
+    """Serialize a description with inline math and references.
 
-    Notes without a matched pair of unescaped dollar signs stay plain Typst
-    strings. ``\\$`` writes a literal dollar sign.
+    Paired ``$...$`` segments render as inline MiTeX and ``@label`` outside
+    them renders as a Typst reference to that label (a table, figure, heading
+    or numbered equation). Notes with neither stay plain Typst strings.
+    ``\\$`` and ``\\@`` write a literal dollar sign and at sign.
     """
 
     parts = _NOTE_DOLLAR.split(text)
     if len(parts) < 3 or len(parts) % 2 == 0:
-        return _typst_string(text.replace("\\$", "$"))
+        parts = [text]
+    if len(parts) == 1 and not _NOTE_REF.search(text):
+        return _typst_string(_note_unescape(text))
     pieces = []
     for index, part in enumerate(parts):
         if index % 2:
             pieces.append(f"#mi({_typst_string(part)})")
         elif part:
-            pieces.append(f"#{_typst_string(part.replace(chr(92) + '$', '$'))}")
+            pieces.extend(_typst_text_pieces(part))
     return "[" + "".join(pieces) + "]"
 
 
